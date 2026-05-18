@@ -112,7 +112,7 @@ var _ = Describe("UaaRelease", func() {
 			deployUAA("./opsfiles/two-db-instances.yml")
 
 			By("stopping the first DB instance", func() {
-				cmd := exec.Command(boshBinaryPath, "-d", "uaa", "stop", "-n", "database/0")
+				cmd := exec.Command(boshBinaryPath, "-d", os.Getenv("BOSH_DEPLOYMENT"), "stop", "-n", "database/0")
 				session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
 				Expect(err).NotTo(HaveOccurred())
 				Eventually(session, 5*time.Minute).Should(gexec.Exit(0))
