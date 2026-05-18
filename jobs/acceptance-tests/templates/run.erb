@@ -6,9 +6,9 @@
 # runs it as root on a VM the director places on the deployment network.
 #
 # Running here -- rather than from the Concourse worker -- is the whole
-# point of the errand: `bosh ssh`/`bosh scp` and the HTTP calls the suite
-# makes reach the UAA instance directly (no bbl SOCKS5 jumpbox, so the
-# suite's hardcoded 10s scp Eventually passes), and /etc/hosts is a normal
+# point of the errand: it is in-region, so `bosh ssh`/`bosh scp` through
+# the jumpbox and the HTTP calls to the UAA instance are LAN-fast and the
+# suite's hardcoded 10s scp Eventually passes, and /etc/hosts is a normal
 # writable file (so the suite's addLocalDNS helper works).
 
 set -euo pipefail
@@ -37,10 +37,17 @@ export BOSH_DEPLOYMENT="<%= p('bosh.deployment') %>"
 director_host="${BOSH_ENVIRONMENT#http*://}"
 export BOSH_DIRECTOR_IP="${director_host%%:*}"
 
-# Deliberately NOT exporting BOSH_ALL_PROXY: this VM is on the deployment
-# network, so the bosh CLI talks to the director/instances directly. The
-# jumpbox proxy is exactly what made the suite's 10s scp Eventually time
-# out from the Concourse worker.
+# The director's :25555 is firewalled to the jumpbox, so even from this
+# on-network VM we must reach it through the jumpbox SOCKS5 proxy.
+# Materialise the jumpbox key and point BOSH_ALL_PROXY at it. Quoted
+# heredoc: ERB has already substituted the key; the quotes keep the
+# shell from mangling it.
+JUMPBOX_KEY_FILE="${RUN_DIR}/jumpbox.key"
+cat > "${JUMPBOX_KEY_FILE}" <<'EOF_JUMPBOX_KEY'
+<%= p('bosh.jumpbox_private_key') %>
+EOF_JUMPBOX_KEY
+chmod 600 "${JUMPBOX_KEY_FILE}"
+export BOSH_ALL_PROXY="<%= p('bosh.all_proxy') %>?private-key=${JUMPBOX_KEY_FILE}"
 
 # The suite (re)deploys from this exact path per scenario. The manifest
 # is delivered base64-encoded so BOSH never sees its inner ((vars)) when
