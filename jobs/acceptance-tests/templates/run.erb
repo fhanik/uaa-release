@@ -17,6 +17,11 @@ PKG=/var/vcap/packages/acceptance-tests
 RUN_DIR=/var/vcap/data/acceptance-tests
 mkdir -p "${RUN_DIR}"
 
+# The BOSH agent runs errands with no $HOME; the bosh CLI needs it to
+# create ~/.bosh (else: "Getting current user home dir: $HOME is not
+# defined"). Point it at our writable data dir.
+export HOME="${RUN_DIR}"
+
 # The suite reads BOSH_CA_CERT as a *path* (it os.ReadFile()s it), so
 # materialise the cert contents to a file. Quoted heredoc: ERB has
 # already substituted the cert text; the quotes stop the shell from
