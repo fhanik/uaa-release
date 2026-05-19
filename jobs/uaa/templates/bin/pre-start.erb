@@ -135,14 +135,19 @@ function ensure_persistent_cert_dir_secure {
 function hand_persistent_cert_dir_to_vcap {
     # ensure_persistent_cert_dir_secure locked the dir to 0700 root:root so
     # only root could write to it during pre-start (symlink-attack window).
-    # All root writes are now done; hand the dir to the vcap group so the
-    # uaa process (run by bpm as vcap) can read the truststore at runtime.
-    # Without this, bin/uaa's `[[ -f .../cert-cache/cacerts ]]` check fails
-    # for vcap (can't traverse a 0700 root:root dir), uaa silently falls
-    # back to the JDK default cacerts, and the operator-supplied
-    # uaa.ca_certs are not honored.
-    chown root:vcap "${PERSISTENT_CERTS_DIR}"
-    chmod 0750 "${PERSISTENT_CERTS_DIR}"
+    # All root writes are now done; open the dir for reading so:
+    #   * the uaa process (run by bpm as vcap) can read the truststore at
+    #     runtime -- without this, bin/uaa's `[[ -f .../cert-cache/cacerts ]]`
+    #     check silently falls through to the JDK default cacerts and the
+    #     operator-supplied uaa.ca_certs are not honored;
+    #   * other on-VM consumers (bbr, bosh-ssh sessions, smoke tests) can
+    #     also stat/read the truststore without needing root.
+    # Mode 0755 with root ownership is the safest hand-off: world-readable
+    # (security-equivalent to 0750 root:vcap once pre-start exits, since no
+    # one writes here again) and independent of which groups the BOSH
+    # agent puts the bosh-ssh ephemeral user in.
+    chown root:root "${PERSISTENT_CERTS_DIR}"
+    chmod 0755 "${PERSISTENT_CERTS_DIR}"
 }
 
 function process_certs {
