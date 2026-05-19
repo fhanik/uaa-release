@@ -132,6 +132,19 @@ function ensure_persistent_cert_dir_secure {
     chmod 0700 "${PERSISTENT_CERTS_DIR}"
 }
 
+function hand_persistent_cert_dir_to_vcap {
+    # ensure_persistent_cert_dir_secure locked the dir to 0700 root:root so
+    # only root could write to it during pre-start (symlink-attack window).
+    # All root writes are now done; hand the dir to the vcap group so the
+    # uaa process (run by bpm as vcap) can read the truststore at runtime.
+    # Without this, bin/uaa's `[[ -f .../cert-cache/cacerts ]]` check fails
+    # for vcap (can't traverse a 0700 root:root dir), uaa silently falls
+    # back to the JDK default cacerts, and the operator-supplied
+    # uaa.ca_certs are not honored.
+    chown root:vcap "${PERSISTENT_CERTS_DIR}"
+    chmod 0750 "${PERSISTENT_CERTS_DIR}"
+}
+
 function process_certs {
     ensure_persistent_cert_dir_secure
     build_new_cache_files
@@ -142,6 +155,8 @@ function process_certs {
     insert_ssl_cert
 
     save_new_cache_files_to_persistent_disk
+
+    hand_persistent_cert_dir_to_vcap
 }
 
 function insert_ssl_cert {
