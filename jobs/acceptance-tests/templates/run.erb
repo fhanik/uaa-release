@@ -70,6 +70,15 @@ export PATH="${PKG}:${PATH}"
 # directory, so run from the package dir where they were unpacked.
 cd "${PKG}"
 
+# TEMP DIAGNOSTIC: dump the truststore state on the uaa instance and the
+# bosh-ssh user's identity, so we can tell from the errand log whether
+# /var/vcap/data/uaa/cert-cache/cacerts genuinely doesn't exist or just
+# isn't readable to the bosh-ssh ephemeral user. Remove this block once
+# the truststore spec is green.
+echo "===== DIAG: uaa cert-cache state ====="
+bosh -n ssh uaa -c 'id; echo ---; ls -laZ /var/vcap/data/uaa 2>&1; echo ---; ls -laZ /var/vcap/data/uaa/cert-cache 2>&1; echo ---; sudo ls -laZ /var/vcap/data/uaa/cert-cache 2>&1; echo ---; sudo stat /var/vcap/data/uaa/cert-cache/cacerts 2>&1; echo ---; sudo tail -30 /var/vcap/sys/log/uaa/pre-start.stdout.log 2>&1' || true
+echo "===== END DIAG ====="
+
 # acceptance_tests.test is the ginkgo v1 suite compiled in CI (go test
 # -c). A compiled v1 binary exposes the runtime flags under the -ginkgo.
 # prefix. The old task used the ginkgo CLI:
