@@ -135,17 +135,17 @@ function ensure_persistent_cert_dir_secure {
 function hand_persistent_cert_dir_to_vcap {
     # ensure_persistent_cert_dir_secure locked the dir to 0700 root:root so
     # only root could write to it during pre-start (symlink-attack window).
-    # All root writes are now done; open the dir for reading so:
-    #   * the uaa process (run by bpm as vcap) can read the truststore at
-    #     runtime -- without this, bin/uaa's `[[ -f .../cert-cache/cacerts ]]`
-    #     check silently falls through to the JDK default cacerts and the
-    #     operator-supplied uaa.ca_certs are not honored;
-    #   * other on-VM consumers (bbr, bosh-ssh sessions, smoke tests) can
-    #     also stat/read the truststore without needing root.
-    # Mode 0755 with root ownership is the safest hand-off: world-readable
-    # (security-equivalent to 0750 root:vcap once pre-start exits, since no
-    # one writes here again) and independent of which groups the BOSH
-    # agent puts the bosh-ssh ephemeral user in.
+    # All root writes are now done.  This function is called AFTER
+    # configure_tomcat so that configure_tomcat's `chown -R vcap:vcap
+    # /var/vcap/data/uaa/` can set the files INSIDE cert-cache to vcap
+    # ownership (required for the UAA process to read them), while we then
+    # snap the DIRECTORY itself back to root:root so that:
+    #   * root-only-writable: the vcap process cannot plant files or symlinks
+    #     inside cert-cache after pre-start exits;
+    #   * world-readable/traversable (0755): the uaa process (run by bpm as
+    #     vcap) reaches cacerts via the "other" r-x bits, and on-VM readers
+    #     such as bosh-ssh ephemeral users or smoke-test errands can also
+    #     stat/read the truststore without needing sudo.
     chown root:root "${PERSISTENT_CERTS_DIR}"
     chmod 0755 "${PERSISTENT_CERTS_DIR}"
 }
@@ -160,8 +160,6 @@ function process_certs {
     insert_ssl_cert
 
     save_new_cache_files_to_persistent_disk
-
-    hand_persistent_cert_dir_to_vcap
 }
 
 function insert_ssl_cert {
@@ -232,6 +230,12 @@ process_certs
 configure_tomcat
 
 configure_spring_boot
+
+# Called after configure_tomcat so that configure_tomcat's
+# `chown -R vcap:vcap /var/vcap/data/uaa/` first sets vcap ownership on the
+# files inside cert-cache, then we snap the directory itself back to
+# root:root 0755 (world-readable, root-only-writable).
+hand_persistent_cert_dir_to_vcap
 
 rm -rf $TMP_DIR
 
