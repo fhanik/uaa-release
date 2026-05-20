@@ -15,6 +15,7 @@ function log {
 }
 
 log "Starting"
+log "CERT-CACHE PERMS [post-start start]: $(stat -c 'mode=%a owner=%U:%G' /var/vcap/data/uaa/cert-cache 2>&1 || echo 'stat failed')"
 
 TS_DIR=/var/vcap/data/uaa/post-start
 mkdir -p ${TS_DIR}
@@ -43,6 +44,14 @@ while [ "${WHEN_NOW}" -ot "${WHEN_FINISH}" ]; do
     if [ "$check" -eq "0" ]
     then
         log "Health check successful"
+        log "CERT-CACHE PERMS [before chmod]: $(stat -c 'mode=%a owner=%U:%G' /var/vcap/data/uaa/cert-cache 2>&1 || echo 'stat failed')"
+        # BPM resets /var/vcap/data/uaa/cert-cache to 0700 vcap:vcap during
+        # process container setup, undoing the pre-start chmod.  Now that UAA
+        # is healthy all writes to cert-cache are done; open it for reading so
+        # bosh-ssh ephemeral users (in the vcap group) and smoke-test errands
+        # can stat/read the truststore without needing sudo.
+        chmod 0755 /var/vcap/data/uaa/cert-cache
+        log "CERT-CACHE PERMS [after chmod]: $(stat -c 'mode=%a owner=%U:%G' /var/vcap/data/uaa/cert-cache 2>&1 || echo 'stat failed')"
         delete_ts_files
         exit 0
     fi

@@ -121,6 +121,13 @@ function save_new_cache_files_to_persistent_disk {
     cp $LDAP_CERTS_FILE $PERSISTENT_LDAP_CERTS_FILE
 }
 
+function log_cert_cache_perms {
+    local label="$1"
+    local perms
+    perms="$(stat -c 'mode=%a owner=%U:%G' "${PERSISTENT_CERTS_DIR}" 2>&1)" || perms="(stat failed: $?)"
+    log "CERT-CACHE PERMS [${label}]: ${perms}"
+}
+
 function ensure_persistent_cert_dir_secure {
     # cert-cache is handed to vcap after pre-start; it must not be a symlink
     # or attacker-controlled mount when root writes here.
@@ -130,24 +137,23 @@ function ensure_persistent_cert_dir_secure {
     mkdir -p "${PERSISTENT_CERTS_DIR}"
     chown root:root "${PERSISTENT_CERTS_DIR}"
     chmod 0700 "${PERSISTENT_CERTS_DIR}"
+    log_cert_cache_perms "after ensure_persistent_cert_dir_secure"
 }
 
 function hand_persistent_cert_dir_to_vcap {
     # ensure_persistent_cert_dir_secure locked the dir to 0700 root:root so
     # only root could write to it during pre-start (symlink-attack window).
-    # All root writes are now done.  This function is called AFTER
-    # configure_tomcat so that configure_tomcat's `chown -R vcap:vcap
-    # /var/vcap/data/uaa/` can set the files INSIDE cert-cache to vcap
-    # ownership (required for the UAA process to read them), while we then
-    # snap the DIRECTORY itself back to root:root so that:
-    #   * root-only-writable: the vcap process cannot plant files or symlinks
-    #     inside cert-cache after pre-start exits;
-    #   * world-readable/traversable (0755): the uaa process (run by bpm as
-    #     vcap) reaches cacerts via the "other" r-x bits, and on-VM readers
-    #     such as bosh-ssh ephemeral users or smoke-test errands can also
-    #     stat/read the truststore without needing sudo.
+    # All root writes are now done; snap the directory to 0755 root:root so
+    # that world-readable/traversable bits are set before pre-start exits.
+    #
+    # NOTE: BPM resets cert-cache ownership to vcap:vcap during "starting
+    # jobs" (container setup), producing 0700 vcap:vcap.  bin/post-start
+    # issues a final `chmod 0755` after the health check passes, which is the
+    # effective permission that bosh-ssh ephemeral users see at test time.
+    log_cert_cache_perms "before hand_persistent_cert_dir_to_vcap chown/chmod"
     chown root:root "${PERSISTENT_CERTS_DIR}"
     chmod 0755 "${PERSISTENT_CERTS_DIR}"
+    log_cert_cache_perms "after hand_persistent_cert_dir_to_vcap chown/chmod"
 }
 
 function process_certs {
@@ -226,16 +232,20 @@ LDAP_CERTS_FILE=/var/vcap/jobs/uaa/config/ldap.crt
 PERSISTENT_LDAP_CERTS_FILE=$PERSISTENT_CERTS_DIR/ldap-certs-cache.txt
 
 process_certs
+log_cert_cache_perms "after process_certs"
 
 configure_tomcat
+log_cert_cache_perms "after configure_tomcat"
 
 configure_spring_boot
+log_cert_cache_perms "after configure_spring_boot"
 
 # Called after configure_tomcat so that configure_tomcat's
 # `chown -R vcap:vcap /var/vcap/data/uaa/` first sets vcap ownership on the
 # files inside cert-cache, then we snap the directory itself back to
 # root:root 0755 (world-readable, root-only-writable).
 hand_persistent_cert_dir_to_vcap
+log_cert_cache_perms "after hand_persistent_cert_dir_to_vcap (final pre-start state)"
 
 rm -rf $TMP_DIR
 

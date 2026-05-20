@@ -76,7 +76,7 @@ cd "${PKG}"
 # isn't readable to the bosh-ssh ephemeral user. Remove this block once
 # the truststore spec is green.
 echo "===== DIAG: uaa cert-cache state ====="
-bosh -n ssh uaa -c 'id; echo ---; ls -laZ /var/vcap/data/uaa 2>&1; echo ---; ls -laZ /var/vcap/data/uaa/cert-cache 2>&1; echo ---; sudo ls -laZ /var/vcap/data/uaa/cert-cache 2>&1; echo ---; sudo stat /var/vcap/data/uaa/cert-cache/cacerts 2>&1; echo ---; sudo tail -30 /var/vcap/sys/log/uaa/pre-start.stdout.log 2>&1' || true
+bosh -n ssh uaa -c 'id; echo ---; ls -laZ /var/vcap/data/uaa 2>&1; echo ---; ls -laZ /var/vcap/data/uaa/cert-cache 2>&1; echo ---; sudo ls -laZ /var/vcap/data/uaa/cert-cache 2>&1; echo ---; sudo stat /var/vcap/data/uaa/cert-cache/cacerts 2>&1; echo ---; echo "=pre-start log (last 40 lines)="; sudo tail -40 /var/vcap/sys/log/uaa/pre-start.stdout.log 2>&1; echo "=post-start log (last 20 lines)="; sudo tail -20 /var/vcap/sys/log/uaa/post-start.stdout.log 2>&1' || true
 echo "===== END DIAG ====="
 
 # acceptance_tests.test is the ginkgo v1 suite compiled in CI (go test
